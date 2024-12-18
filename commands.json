@@ -1,0 +1,9 @@
+[
+    {
+        "name": "git-empty-commit",
+        "description": "Create an empty commit",
+        "command": {
+            "cmd": "git commit --allow-empty -m 'Empty commit'"
+        }
+    }
+]
