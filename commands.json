@@ -1,9 +1,107 @@
 [
     {
-        "name": "git-empty-commit",
-        "description": "Create an empty commit",
+        "name": "mobi:stage",
+        "description": "Serve Archipad Mobi App",
         "command": {
-            "cmd": "git commit --allow-empty -m 'Empty commit'"
+            "dir": "~/Developer/archipad/archipad-js",
+            "cmd": "./legacy/run.sh contractor --assume-yes --stage"
+        }
+    },
+    {
+        "name": "cloud",
+        "description": "Serve Archipad Cloud",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-js",
+            "cmd": "./legacy/run.sh cloud --assume-yes --authority http://127.0.0.1:4444/ --profileURI http://localhost:3000/ --oAuthClientId 52314091-6a42-409c-abf7-5e63dd22b64f --local-docker"
+        }
+    },
+    {
+        "name": "cloud:stage",
+        "description": "Serve Archipad Cloud App",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-js",
+            "cmd": "./legacy/run.sh cloud --assume-yes --stage"
+        }
+    },
+    {
+        "name": "cloud:prod",
+        "description": "Serve Archipad Cloud App",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-js",
+            "cmd": "./legacy/run.sh cloud --assume-yes --prod"
+        }
+    },
+    {
+        "name": "auth-cluster",
+        "description": "auto-install-port-forward script",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-gitops",
+            "cmd": "./auto-install-upgrade-oauth.sh"
+        }
+    },
+    {
+        "name": "compile",
+        "description": "Rebuild Alfred Script",
+        "command": {
+            "dir": "~/Developer/alfred",
+            "cmd": "./auto-deploy.sh"
+        }
+    },
+    {
+        "name": "edit",
+        "description": "Edit Alfred Script",
+        "command": {
+            "dir": "~/Developer/alfred",
+            "cmd": "code ."
+        }
+    },
+    {
+        "name": "extract-translations",
+        "description": "Extract translations from Archipad Cloud App",
+        "command": {
+            "dir": "~/Developer/archipad/translation-tools",
+            "cmd": "node dist/cloud-extract.js -o ../archipad-js/legacy/localize --outputFileType json --sourceFileType json"
+        }
+    },
+    {
+        "name": "ls",
+        "description": "test purpose",
+        "config": {
+            "confirm": true
+        },
+        "command": {
+            "cmd": "ls"
+        },
+        "options": [
+            {
+                "flags": "-all, --all [qwe]",
+                "description": "List all files",
+                "choices": [
+                    "true",
+                    "false"
+                ],
+                "type": "number"
+            }
+        ]
+    },
+    {
+        "name": "ls:2",
+        "extends": "ls"
+    },
+    {
+        "name": "auth",
+        "description": "Serve Auth Local Cluster",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-plus-ts",
+            "cmd": "npx nx run-many --target=serve --projects=auth-api,auth-ui"
+        }
+    },
+    {
+        "name": "admin",
+        "description": "Serve Admin Stack",
+        "command": {
+            "dir": "~/Developer/archipad/archipad-plus-ts",
+            "cmd": "npx nx run-many --target=serve --projects=admin-api,admin-ui --inspect=false"
         }
     }
 ]

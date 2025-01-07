@@ -1,7 +1,10 @@
 {
   "dependencies": {
+    "@types/lodash": "^4.17.14",
     "commander": "^12.1.0",
     "inquirer-autocomplete-standalone": "^0.8.1",
+    "lodash": "^4.17.21",
+    "zod": "^3.24.1",
     "zx": "^8.2.4"
   }
 }
