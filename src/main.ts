@@ -6,12 +6,12 @@ import z, { ZodError } from "zod";
 import chalk from "chalk";
 import { merge } from "lodash";
 import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
-
+import { version, description } from "../package.json";
 //#region main
 
 async function main() {
     try {
-        const program = new Command().version("0.1.0").description("Alfred CLI");
+        const program = new Command().version(version).description(description);
 
         const parsedAlfredCommands = AlfredCommandsSchema.parse(alfredCommands);
     
@@ -22,12 +22,12 @@ async function main() {
                     (cmd) => cmd.name === alfredCommand.extends
                 );
                 if (!parentCommand) {
-                    throw new Error(`Command ${alfredCommand.extends} not found`);
+                    throw new Error(`Illegal state error`);
                 }
                 if (alfredCommand?.command?.cmd) {
                     alfredCommand.command.cmd = alfredCommand.command.cmd.replace("{super}", parentCommand?.command?.cmd ?? "");
                 }
-                alfredCommand = merge(parentCommand, alfredCommand) as AlfredCommand;
+                alfredCommand = merge({}, parentCommand, alfredCommand) as AlfredCommand;
             }
             const safeCommand = AlfredCommandSchema.parse(alfredCommand);
     
