@@ -1,0 +1,32 @@
+[
+    {
+        "name": "git:empty-commit",
+        "description": "Create an empty commit",
+        "command": {
+            "cmd": "git commit --allow-empty -m \"${message}\""
+        },
+        "options": [
+            {
+                "flags": "-m, --message [message]",
+                "description": "Commit message",
+                "type": "string",
+                "defaultValue": "Empty commit"
+            }
+        ]
+    },
+    {
+        "name": "ls",
+        "description": "List files in home directory",
+        "command": {
+            "cmd": "ls",
+            "dir": "~/"
+        }
+    },
+    {
+        "name": "ls:hidden",
+        "extends": "ls",
+        "command": {
+            "cmd": "{super} -la"
+        }
+    }
+]

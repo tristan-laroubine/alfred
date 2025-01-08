@@ -2,136 +2,90 @@ import { Command } from "commander";
 import autocomplete from "inquirer-autocomplete-standalone";
 import alfredCommands from "../commands.json";
 import { $, cd, os } from "zx";
-import z from "zod";
+import z, { ZodError } from "zod";
 import chalk from "chalk";
 import { merge } from "lodash";
-$.verbose = true;
-const AlfredCommandSchema = z.object({
-    name: z.string().min(1, { message: "Command Name is required" }),
-    description: z.string(),
-    command: z.object({
-        dir: z.string().optional(),
-        cmd: z.string().min(1, { message: "Command is required" }),
-    }),
-    config: z
-        .object({
-            confirm: z.boolean().optional(),
-        })
-        .optional(),
-    extends: z.string().optional(),
-    options: z
-        .array(
-            z.object({
-                flags: z.string(),
-                description: z.string(),
-                required: z.boolean().optional(),
-                defaultValue: z.any().optional(),
-                envVar: z.string().optional(),
-                choices: z.array(z.string()).optional(),
-                type: z.enum(["number", "string", "boolean", "url", "path"]).optional(),
-            }).strict()
-        )
-        .optional()
-        .default([]),
-}).strict();
-const ExtendedAlfredCommandSchema = AlfredCommandSchema.extend({
-    extends: z.string(),
-}).deepPartial();
-
-const AlfredCommandsSchema = z.array(
-    z.union([AlfredCommandSchema, ExtendedAlfredCommandSchema])
-).superRefine((commands, ctx) => {
-    const commandNames = commands.map((cmd) => cmd.name);
-    commands.forEach((cmd, index) => {
-        if ("extends" in cmd) {
-            if (!commandNames.includes(cmd.extends ?? "")) {
-                ctx.addIssue({
-                    path: [index, "extends"],
-                    message: `Command "${cmd.extends}" not found`,
-                    fatal: true,
-                    code: "custom",
-                });
-            }
-        }
-    });
-});
-
-type AlfredCommands = z.infer<typeof AlfredCommandsSchema>;
-type AlfredCommand = z.infer<typeof AlfredCommandSchema>;
-
+import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
 
 //#region main
 
 async function main() {
-    const program = new Command().version("0.0.1").description("Alfred CLI");
+    try {
+        const program = new Command().version("0.0.2").description("Alfred CLI");
 
-    const parsedAlfredCommands = AlfredCommandsSchema.parse(alfredCommands);
-
-    parsedAlfredCommands.forEach((alfredCommand) => {
-        const isExtends = "extends" in alfredCommand;
-        if (isExtends) {
-            const parentCommand = parsedAlfredCommands.find(
-                (cmd) => cmd.name === alfredCommand.extends
-            );
-            if (!parentCommand) {
-                throw new Error(`Command ${alfredCommand.extends} not found`);
-            }
-            alfredCommand = merge(parentCommand, alfredCommand) as AlfredCommand;
-        }
-        const safeCommand = AlfredCommandSchema.parse(alfredCommand);
-
-        const command = program
-            .command(safeCommand.name)
-            .description(safeCommand.description)
-            .action(async (options, command) => {
-                console.log(options);
-                console.log(`Running command: ${safeCommand.name} 🚀`);
-                console.log(`Description: ${safeCommand.description}`);
-                if (safeCommand.config?.confirm) {
-                    const isConfirm = confirm(
-                        `Are you sure you want to run this command? ${safeCommand.name}`
-                    );
-                    if (!isConfirm) {
-                        console.log("Command canceled ❌");
-                        return;
-                    }
-                }
-
-                if (!Array.isArray(safeCommand.command)) {
-                    await execCommand(safeCommand.command);
-                    return;
-                }
-                await Promise.all(
-                    safeCommand.command.map((command) => execCommand(command))
+        const parsedAlfredCommands = AlfredCommandsSchema.parse(alfredCommands);
+    
+        parsedAlfredCommands.forEach((alfredCommand) => {
+            const isExtends = "extends" in alfredCommand;
+            if (isExtends) {
+                const parentCommand = parsedAlfredCommands.find(
+                    (cmd) => cmd.name === alfredCommand.extends
                 );
-                return this;
-            });
-        safeCommand.options?.map((option) => buildOptions(command, option));
-    });
-
-
-    const isEmptyCommand = process.argv.length === 2;
-    if (isEmptyCommand) {
-        const command = await autocomplete({
-            message: "Select a command 🤖  ",
-            source: async (input) => {
-                return alfredCommands
-                    .filter((alfredCommand) =>
-                        alfredCommand.name.includes(input ?? "")
-                    )
-                    .map((alfredCommand) => {
-                        return {
-                            value: alfredCommand.name,
-                            name: `${chalk.bold(alfredCommand.name)} (${chalk.italic(
-                                alfredCommand.description
-                            )})`,
-                        };
-                    });
-            },
+                if (!parentCommand) {
+                    throw new Error(`Command ${alfredCommand.extends} not found`);
+                }
+                if (alfredCommand?.command?.cmd) {
+                    alfredCommand.command.cmd = alfredCommand.command.cmd.replace("{super}", parentCommand?.command?.cmd ?? "");
+                }
+                alfredCommand = merge(parentCommand, alfredCommand) as AlfredCommand;
+            }
+            const safeCommand = AlfredCommandSchema.parse(alfredCommand);
+    
+            const command = program
+                .command(safeCommand.name)
+                .description(safeCommand.description)
+                .action(async (options: Record<string, string | number | boolean> | undefined, command) => {
+                    console.log(`🤖 Running command: ${safeCommand.name}`);
+                    if (safeCommand.config?.confirm) {
+                        const isConfirm = confirm(
+                            `Are you sure you want to run this command? ${safeCommand.name}`
+                        );
+                        if (!isConfirm) {
+                            console.log("Command canceled ❌");
+                            return;
+                        }
+                    }
+                    
+                    await execCommand(safeCommand.command, options);
+                    return;
+                });
+            safeCommand.options?.map((option) => buildOptions(command, option));
         });
-        await program.parseAsync([process.argv[0], process.argv[1], command]);
-    } else {
-        await program.parseAsync(process.argv);
+    
+    
+        const isEmptyCommand = process.argv.length === 2;
+        if (isEmptyCommand) {
+            const command = await autocomplete({
+                message: "Select a command 🤖  ",
+                source: async (input) => {
+                    return alfredCommands
+                        .filter((alfredCommand) =>
+                            alfredCommand.name.includes(input ?? "")
+                        )
+                        .map((alfredCommand) => {
+                            return {
+                                value: alfredCommand.name,
+                                name: `${chalk.bold(alfredCommand.name)} (${chalk.italic(
+                                    alfredCommand.description
+                                )})`,
+                            };
+                        });
+                },
+            });
+            await program.parseAsync([process.argv[0], process.argv[1], command]);
+        } else {
+            await program.parseAsync(process.argv);
+        }
+    } catch (error) {
+        if (error instanceof ZodError){
+            console.error(`There is a format error in the command configuration. Please correct it by referring to the manual.`);
+            const zodInfo = error.errors[0];
+            console.error(`Code: ${zodInfo.code}`);
+            console.error(`Message: ${zodInfo.message}`);
+            console.error(`Path: ${zodInfo.path.join(".")}`);
+            process.exit(22);
+        }
+        throw error;
     }
 }
 
@@ -191,10 +145,23 @@ function buildOptions(
     return command;
 }
 async function execCommand(
-    command: AlfredCommand['command']
+    command: AlfredCommand['command'],
+    options: Record<string, string | number | boolean> = {}
 ) {
     execRelativeCdCommand(command.dir);
-    const script = command.cmd;
+    let script = command.cmd;
+    // https://regex101.com/r/BKNCeu/1
+    const commandOptionsRegex = /(\$\{(\w+)\})/g;
+    const matches = [...script.matchAll(commandOptionsRegex)];
+    for (const match of matches) {
+        const [_, fullMatch, optionName] = match;
+        const optionValue = options[optionName];
+        if (optionValue === undefined || optionValue === null) {
+            script = script.replace(` ${fullMatch}`, "");
+        } else {
+            script = script.replace(fullMatch, optionValue.toString());
+        }
+    }
 
     const { stderr, stdout, exitCode } = await $`bash -c ${script}`.nothrow();
     if (exitCode === 0) {

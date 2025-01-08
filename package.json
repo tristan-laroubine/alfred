@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "compile": "./auto-deploy.sh"
+  },
   "dependencies": {
     "@types/lodash": "^4.17.14",
     "commander": "^12.1.0",
