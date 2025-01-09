@@ -1,4 +1,4 @@
-# alfred
+# 🤖 Alfred
 The butler for the CLI
 
 
