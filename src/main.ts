@@ -8,7 +8,7 @@ import { merge } from "lodash";
 import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
 import { version, description } from "../package.json";
 //#region main
-
+$.verbose=true;
 async function main() {
     try {
         const program = new Command().version(version).description(description);
