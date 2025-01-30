@@ -1,14 +1,20 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Alfred CLI",
+  "bin": {
+    "alfred": "dist/alfred"
+  },
+  "name": "allfy",
   "scripts": {
-    "compile": "./auto-deploy.sh"
+    "compile": "bun build src/main.ts --compile --minify --outfile dist/alfred && find . -iname '*.bun-build' -type f -delete"
   },
   "dependencies": {
     "@types/lodash": "^4.17.14",
     "commander": "^12.1.0",
     "inquirer-autocomplete-standalone": "^0.8.1",
     "lodash": "^4.17.21",
+    "minimist": "^1.2.8",
+    "tabtab": "^3.0.2",
     "zod": "^3.24.1",
     "zx": "^8.2.4"
   }

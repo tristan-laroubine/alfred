@@ -7,14 +7,15 @@ import chalk from "chalk";
 import { merge } from "lodash";
 import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
 import { version, description } from "../package.json";
+import { log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
 //#region main
-$.verbose=true;
+$.verbose = true;
 async function main() {
     try {
         const program = new Command().version(version).description(description);
 
         const parsedAlfredCommands = AlfredCommandsSchema.parse(alfredCommands);
-    
+
         parsedAlfredCommands.forEach((alfredCommand) => {
             const isExtends = "extends" in alfredCommand;
             if (isExtends) {
@@ -30,7 +31,7 @@ async function main() {
                 alfredCommand = merge({}, parentCommand, alfredCommand) as AlfredCommand;
             }
             const safeCommand = AlfredCommandSchema.parse(alfredCommand);
-    
+
             const command = program
                 .command(safeCommand.name)
                 .description(safeCommand.description)
@@ -45,14 +46,14 @@ async function main() {
                             return;
                         }
                     }
-                    
+
                     await execCommand(safeCommand.command, options);
                     return;
                 });
             safeCommand.options?.map((option) => buildOptions(command, option));
         });
-    
-    
+        buildCompletionOption(program, parsedAlfredCommands as AlfredCommand[]);
+
         const isEmptyCommand = process.argv.length === 2;
         if (isEmptyCommand) {
             const command = await autocomplete({
@@ -72,12 +73,13 @@ async function main() {
                         });
                 },
             });
+
             await program.parseAsync([process.argv[0], process.argv[1], command]);
         } else {
             await program.parseAsync(process.argv);
         }
     } catch (error) {
-        if (error instanceof ZodError){
+        if (error instanceof ZodError) {
             console.error(`There is a format error in the command configuration. Please correct it by referring to the manual.`);
             const zodInfo = error.errors[0];
             console.error(`Code: ${zodInfo.code}`);
@@ -109,7 +111,7 @@ function buildOptions(
     const commandOptions = command.createOption(flags, description);
 
     if (required) {
-       commandOptions.makeOptionMandatory(true);
+        commandOptions.makeOptionMandatory(true);
     }
     if (defaultValue) {
         commandOptions.default(defaultValue);
@@ -121,7 +123,7 @@ function buildOptions(
     if (envVar) {
         commandOptions.env(envVar);
     }
-    if (type){
+    if (type) {
         switch (type) {
             case "number":
                 commandOptions.argParser(Number);
@@ -143,6 +145,53 @@ function buildOptions(
 
     command.addOption(commandOptions);
     return command;
+}
+function buildCompletionOption(program: Command, alfredCommands: AlfredCommand[]) {
+    const globalCommandOptions = [{
+        name: "--version",
+        description: "Show version number",
+    },
+    {
+        name: "--help",
+        description: "Show help",
+    }];
+    program
+        .command("completion")
+        .description("Generate completion script")
+        .action(() => {
+            const env = tabtabParseEnv(process.env);
+            
+            if (env.words === 1 && env.prev === "alfred") {
+                tabtabLog([...alfredCommands.map((command) => {
+                    return {
+                        name: command.name,
+                        description: command.description,
+                    }
+                }),
+            ...globalCommandOptions
+         ]);
+                return;
+            }
+            // 
+            // Complete the command
+            if (env.prev !== "alfred") {
+                const command = alfredCommands.find((command) => command.name === env.prev);
+                // log([JSON.stringify(command?.options, null, 2)]);
+                const descriptions = command?.options?.map((option) => {
+                    const extractFlagNameRegex = /(--\w+)/;
+                    const matches = extractFlagNameRegex.exec(option.flags);
+                    return {
+                        name: matches?.[1],
+                        description: `${option.flags} ${option.description}`,
+                    }
+                }).filter(({ name }) => name !== undefined);
+
+                tabtabLog([...descriptions ?? [], ...globalCommandOptions]);
+
+                return;
+            }
+            
+        });
 }
 async function execCommand(
     command: AlfredCommand['command'],

@@ -1,4 +1,5 @@
 
+import { merge } from "lodash";
 import { z } from "zod";
 
 export const AlfredCommandSchema = z.object({
@@ -54,3 +55,22 @@ export const AlfredCommandsSchema = z.array(
 export type AlfredCommands = z.infer<typeof AlfredCommandsSchema>;
 export type AlfredCommand = z.infer<typeof AlfredCommandSchema>;
 
+export function computeAlfredCommandsSchema(commands): AlfredCommands {
+    return AlfredCommandsSchema.parse(commands).map((command) => {
+        const isExtends = "extends" in command;
+        if (isExtends) {
+            const parentCommand = commands.find(
+                (cmd) => cmd.name === command.extends
+            );
+            if (!parentCommand) {
+                throw new Error(`Illegal state error`);
+            }
+            if (command?.command?.cmd) {
+                command.command.cmd = command.command.cmd.replace("{super}", parentCommand?.command?.cmd ?? "");
+            }
+            command = merge({}, parentCommand, command) as AlfredCommand;
+        }
+        const safeCommand = AlfredCommandSchema.parse(command);
+        return safeCommand;
+    });
+}
