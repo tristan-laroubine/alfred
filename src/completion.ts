@@ -1,15 +1,12 @@
-import alfredCommands from "../commands.json";
 import { AlfredCommandSchema, computeAlfredCommandsSchema } from "./alfredCommandSchema";
 import { install, log } from "tabtab";
+import { getCommandsCache, interactiveInitCache } from "./localCache";
 
-const commands = computeAlfredCommandsSchema(alfredCommands);
-log(commands.map((command) => 
-    command.name)
-);
+export async function installCompletion(){
+    await interactiveInitCache();
 
-install({
-    name: "alfred",
-    completer: "alfred",
-    postInstallMessage: "Don't forget to restart your shell",
-});
-
+   await install({
+        name: "alfred",
+        completer: "alfred",
+    });
+}

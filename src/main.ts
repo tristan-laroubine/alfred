@@ -1,6 +1,5 @@
 import { Command } from "commander";
 import autocomplete from "inquirer-autocomplete-standalone";
-import alfredCommands from "../commands.json";
 import { $, cd, os } from "zx";
 import z, { ZodError } from "zod";
 import chalk from "chalk";
@@ -8,13 +7,32 @@ import { merge } from "lodash";
 import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
 import { version, description } from "../package.json";
 import { log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
+import { getCommandsCache } from "./localCache";
+import { installCompletion } from "./completion";
 //#region main
 $.verbose = true;
-async function main() {
-    try {
-        const program = new Command().version(version).description(description);
 
-        const parsedAlfredCommands = AlfredCommandsSchema.parse(alfredCommands);
+
+async function handleInitCommand() {
+    const isContainsInitCommand = process.argv.includes("--init");
+    if (!isContainsInitCommand) {
+        return;
+    }
+    console.log("🤖 Initializing alfred CLI...");
+    await installCompletion();
+    console.log("✅ alfred CLI initialized.");
+    process.exit(0);
+}
+
+
+async function main() {
+    await handleInitCommand();
+    try {
+        const program = new Command().version(version).description(description).option(
+            '--init', 'Initialize alfred CLI on your system'
+        )
+        const rawCommands = await getCommandsCache(true);
+        const parsedAlfredCommands = AlfredCommandsSchema.parse(rawCommands);
 
         parsedAlfredCommands.forEach((alfredCommand) => {
             const isExtends = "extends" in alfredCommand;
@@ -59,9 +77,9 @@ async function main() {
             const command = await autocomplete({
                 message: "Select a command 🤖  ",
                 source: async (input) => {
-                    return alfredCommands
+                    return parsedAlfredCommands
                         .filter((alfredCommand) =>
-                            alfredCommand.name.includes(input ?? "")
+                            alfredCommand.name?.includes(input ?? "")
                         )
                         .map((alfredCommand) => {
                             return {
@@ -74,7 +92,7 @@ async function main() {
                 },
             });
 
-            await program.parseAsync([process.argv[0], process.argv[1], command]);
+            await program.parseAsync([process.argv[0], process.argv[1], command ?? ""]);
         } else {
             await program.parseAsync(process.argv);
         }
