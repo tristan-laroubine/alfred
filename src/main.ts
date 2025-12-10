@@ -8,29 +8,15 @@ import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfr
 import { version, description } from "../package.json";
 import { log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
 import { getCommandsCache } from "./localCache";
-import { installCompletion } from "./completion";
 //#region main
 $.verbose = true;
 
 
-async function handleInitCommand() {
-    const isContainsInitCommand = process.argv.includes("--init");
-    if (!isContainsInitCommand) {
-        return;
-    }
-    console.log("🤖 Initializing alfred CLI...");
-    await installCompletion();
-    console.log("✅ alfred CLI initialized.");
-    process.exit(0);
-}
 
 
 async function main() {
-    await handleInitCommand();
     try {
-        const program = new Command().version(version).description(description).option(
-            '--init', 'Initialize alfred CLI on your system'
-        )
+        const program = new Command().version(version).description(description);
         const rawCommands = await getCommandsCache(true);
         const parsedAlfredCommands = AlfredCommandsSchema.parse(rawCommands);
 
@@ -153,7 +139,6 @@ function buildOptions(
                 commandOptions.argParser((v) => v.toLowerCase() === "true");
                 break;
             case "url":
-                ;
                 commandOptions.argParser((value: string) => new URL(z.string().url().parse(value)));
                 break;
             default:

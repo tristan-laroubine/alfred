@@ -2,16 +2,17 @@
   "version": "0.6.0",
   "description": "Alfred CLI",
   "bin": {
-    "alfred": "dist/alfred"
+    "alfred": "dist/main"
   },
   "name": "allfy",
   "scripts": {
-    "compile": "bun build src/main.ts --compile --minify --outfile dist/alfred && find . -iname '*.bun-build' -type f -delete"
+    "compile": "bun build src/main.ts --compile --minify --outfile dist/main && find . -iname '*.bun-build' -type f -delete",
+    "build-init": "bun build src/postinstall.ts --outfile scripts/postinstall.js --target node",
+    "preinstall": "node scripts/preinstall.js",
+    "postinstall": "bun run scripts/postinstall.ts"
   },
   "dependencies": {
-    "@types/lodash": "^4.17.20",
-    "@types/prompts": "^2.4.9",
-    "@types/tabtab": "^3.0.4",
+    "bun": "^1.3.4",
     "commander": "^12.1.0",
     "env-paths": "^3.0.0",
     "inquirer-autocomplete-standalone": "^0.8.1",
@@ -19,7 +20,16 @@
     "minimist": "^1.2.8",
     "prompts": "^2.4.2",
     "tabtab": "^3.0.2",
-    "zod": "^3.25.76",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.4",
+    "@types/lodash": "^4.17.20",
+    "@types/prompts": "^2.4.9",
+    "@types/tabtab": "^3.0.4",
     "zx": "^8.8.5"
+  },
+  "peerDependencies": {
+    "bun": "*"
   }
 }
