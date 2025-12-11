@@ -6,8 +6,8 @@ import chalk from "chalk";
 import { merge } from "lodash";
 import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
 import { version, description } from "../package.json";
-import { log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
-import { getCommandsCache } from "./localCache";
+import { install, log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
+import { getCommandsCache, interactiveInitCache } from "./localCache";
 //#region main
 $.verbose = true;
 
@@ -57,7 +57,7 @@ async function main() {
             safeCommand.options?.map((option) => buildOptions(command, option));
         });
         buildCompletionOption(program, parsedAlfredCommands as AlfredCommand[]);
-
+        buildInitOption(program);
         const isEmptyCommand = process.argv.length === 2;
         if (isEmptyCommand) {
             const command = await autocomplete({
@@ -195,6 +195,20 @@ function buildCompletionOption(program: Command, alfredCommands: AlfredCommand[]
             }
             
         });
+}
+
+function buildInitOption(program: Command) {
+    program
+        .command("init")
+        .description("Initialize auto-completion")
+        .action(async () => {
+            console.log("🤖 Initializing auto-completion");
+            await install({
+                name: "alfred",
+                completer: "alfred",
+            });
+            console.log("✅ Auto-completion initialized successfully!");
+    });
 }
 async function execCommand(
     command: AlfredCommand['command'],

@@ -1,20 +1,33 @@
-import { appendFileSync } from "fs";
-import { install } from "tabtab";
-import { interactiveInitCache } from "../src/localCache";
+#!/usr/bin/env node
+
+import { initCacheFiles } from "../src/localCache";
 import { $ } from "bun";
+// A reliable postinstall script
+const os = require("os");
+const path = require("path");
+const fs = require("fs");
 
-appendFileSync('./tmp-postinstall.log', 'postinstall triggered\n');
+try {
+  const global = process.env.npm_config_global === "true";
 
-console.log("🤖 Initializing alfred CLI...");
-await interactiveInitCache();
-await install({
-    name: "alfred",
-    completer: "alfred",
-});
-$`bun i`;
-await Bun.build({
-  entrypoints: ['./src/main.ts'],
-  outdir: './dist',
-  compile: true,
-});
-console.log("✅ alfred CLI initialized successfully!");
+  // Log where we are running
+  const logPath = path.join(os.tmpdir(), "allfy-postinstall.log");
+  fs.appendFileSync(
+    logPath,
+    `[${new Date().toISOString()}] postinstall triggered (global=${global})\n`
+  );
+
+  await initCacheFiles();
+  $`bun i`;
+  await Bun.build({
+    entrypoints: ['./src/main.ts'],
+    outdir: './dist',
+    compile: true,
+  });
+
+  console.log("✔ postinstall executed");
+  console.log("Log: " + logPath);
+} catch (err) {
+  console.error("postinstall failed:", err);
+  process.exit(1);
+}
