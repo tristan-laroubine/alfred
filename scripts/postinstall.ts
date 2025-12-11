@@ -6,7 +6,6 @@ import { $ } from "bun";
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
-
 try {
   const global = process.env.npm_config_global === "true";
 
@@ -18,7 +17,6 @@ try {
   );
 
   await initCacheFiles();
-  $`bun i`;
   await Bun.build({
     entrypoints: ['./src/main.ts'],
     outdir: './dist',
