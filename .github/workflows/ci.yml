@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - name: Build the npm package and run it with Node
+        run: |
+          bun run build
+          node dist/alfred.js --version
+          node dist/alfred.js completion zsh > /dev/null
+      - name: Check shell scripts
+        run: |
+          sh -n install.sh
+          bash -n scripts/build-binaries.sh scripts/render-formula.sh

@@ -1,0 +1,109 @@
+name: Release
+
+# Push a tag matching package.json (e.g. `git tag v0.8.0 && git push origin v0.8.0`)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Check that the tag matches package.json
+        run: |
+          version="v$(jq -r .version package.json)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json ($version)"
+            exit 1
+          fi
+      - run: bun run typecheck
+      - run: bun test
+      - run: scripts/build-binaries.sh
+      - name: Smoke test
+        run: |
+          build/darwin-arm64/alfred --version
+          build/darwin-arm64/alfred completion zsh > /dev/null
+      - name: Render the Homebrew formula
+        run: scripts/render-formula.sh "$GITHUB_REF_NAME" release/checksums.txt > release/allfy.rb
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --title "$GITHUB_REF_NAME" --generate-notes
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+
+  smoke-test-linux:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install with install.sh
+        env:
+          ALFRED_VERSION: ${{ github.ref_name }}
+        run: |
+          sh install.sh
+          ~/.local/bin/alfred --version
+
+  homebrew:
+    needs: binaries
+    runs-on: ubuntu-latest
+    env:
+      # Fine-grained token with "Contents: read and write" on tristan-laroubine/homebrew-tap
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: Update the tap
+        if: env.TAP_TOKEN != ''
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/tristan-laroubine/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp allfy.rb tap/Formula/allfy.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/allfy.rb
+          git commit -m "allfy ${GITHUB_REF_NAME#v}"
+          git push
+      - name: Explain how to enable the tap update
+        if: env.TAP_TOKEN == ''
+        run: |
+          echo "::warning::HOMEBREW_TAP_TOKEN is not set: copy allfy.rb from the release into tristan-laroubine/homebrew-tap/Formula/ manually."
+
+  npm:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Explain how to enable npm publishing
+        if: env.NPM_TOKEN == ''
+        run: echo "::warning::NPM_TOKEN is not set, publish manually with 'npm publish'."

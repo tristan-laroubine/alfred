@@ -1,0 +1,76 @@
+[
+    {
+        "name": "app:serve",
+        "description": "Serve the app",
+        "command": {
+            "dir": "~/Developer/app",
+            "cmd": "./run.sh serve --assume-yes"
+        }
+    },
+    {
+        "name": "app:serve-fast",
+        "extends": "app:serve",
+        "description": "Serve the app without checks",
+        "command": {
+            "cmd": "{super} --no-checks"
+        }
+    },
+    {
+        "name": "app:stage",
+        "extends": "app:serve",
+        "description": "Serve the app in stage mode",
+        "command": {
+            "cmd": "{super} --stage"
+        }
+    },
+    {
+        "name": "git:empty-commit",
+        "description": "Create an empty commit",
+        "command": {
+            "cmd": "git commit --allow-empty -m \"${message}\""
+        },
+        "options": [
+            {
+                "flags": "-m, --message [message]",
+                "description": "Commit message",
+                "type": "string",
+                "defaultValue": "Empty commit"
+            }
+        ]
+    },
+    {
+        "name": "git:auto-commit",
+        "description": "Commit with confirmation",
+        "command": {
+            "cmd": "git commit -am \"wip\""
+        },
+        "config": {
+            "confirm": true
+        }
+    },
+    {
+        "name": "pkill",
+        "description": "Kill all processes by name",
+        "command": {
+            "cmd": "pkill -f {name}"
+        },
+        "config": {
+            "confirm": true
+        },
+        "options": [
+            {
+                "flags": "-n, --name [name]",
+                "description": "Process name to kill",
+                "type": "string",
+                "required": true
+            }
+        ]
+    },
+    {
+        "name": "pods",
+        "description": "Bash arrays and variables",
+        "command": {
+            "cmd": "bash -c 'pods=(\"a\" \"b\"); for p in \"${pods[@]}\"; do echo \"$p\"; done'"
+        }
+    }
+]

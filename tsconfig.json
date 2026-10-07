@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "target": "ES2022",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "types": ["bun"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src"]
+}

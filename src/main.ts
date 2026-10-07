@@ -1,251 +1,223 @@
-import { Command } from "commander";
-import autocomplete from "inquirer-autocomplete-standalone";
-import { $, cd, os } from "zx";
-import z, { ZodError } from "zod";
-import chalk from "chalk";
-import { merge } from "lodash";
-import { AlfredCommand, AlfredCommandSchema, AlfredCommandsSchema } from "./alfredCommandSchema";
-import { version, description } from "../package.json";
-import { install, log as tabtabLog, parseEnv as tabtabParseEnv } from "tabtab";
-import { getCommandsCache, interactiveInitCache } from "./localCache";
-//#region main
-$.verbose = true;
+#!/usr/bin/env node
+import confirm from "@inquirer/confirm";
+import { Command, Option } from "commander";
+import pc from "picocolors";
+import { description, version } from "../package.json";
+import { doctor, editCommands, initAlfred, listCommands } from "./builtins";
+import {
+    completionCandidates,
+    completionScript,
+    detectShell,
+    formatCandidates,
+    isShell,
+    wordsFromLine,
+} from "./completion";
+import {
+    commandsFilePath,
+    createCommandsFile,
+    type LoadedCommands,
+    loadCommands,
+    migrateLegacyCommandsFile,
+    tildify,
+} from "./config";
+import { AlfredError, ConfigError, printError } from "./errors";
+import { createOption, promptOptions } from "./options";
+import { pickCommand } from "./picker";
+import { resolveWorkingDirectory, runCommand } from "./run";
+import type { AlfredCommand } from "./schema";
 
+const BUILTINS = [
+    { value: "list", description: "List your commands" },
+    { value: "edit", description: "Edit your commands file" },
+    { value: "init", description: "Create the commands file and enable shell completion" },
+    { value: "doctor", description: "Check your setup and your commands file" },
+    { value: "completion", description: "Print the shell completion script" },
+];
 
+const isInteractive = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
+async function runAlfredCommand(
+    command: AlfredCommand,
+    values: Record<string, unknown>,
+    args: string[],
+    skipConfirm: boolean
+): Promise<void> {
+    const cwd = resolveWorkingDirectory(command.command.dir);
+    // Status messages go to stderr so the command output can be piped
+    console.error(`🤖 ${pc.bold(command.name)}${command.command.dir ? pc.dim(` in ${tildify(cwd)}`) : ""}`);
 
-async function main() {
-    try {
-        const program = new Command().version(version).description(description);
-        const rawCommands = await getCommandsCache(true);
-        const parsedAlfredCommands = AlfredCommandsSchema.parse(rawCommands);
+    if (command.config.confirm && !skipConfirm) {
+        if (!isInteractive()) {
+            throw new AlfredError(`"${command.name}" needs a confirmation`, { hint: "Run it with --yes." });
+        }
+        console.error(pc.dim(`$ ${command.command.cmd}`));
+        if (!(await confirm({ message: "Run it?", default: false }))) {
+            console.error("Canceled");
+            return;
+        }
+    }
 
-        parsedAlfredCommands.forEach((alfredCommand) => {
-            const isExtends = "extends" in alfredCommand;
-            if (isExtends) {
-                const parentCommand = parsedAlfredCommands.find(
-                    (cmd) => cmd.name === alfredCommand.extends
-                );
-                if (!parentCommand) {
-                    throw new Error(`Illegal state error`);
-                }
-                if (alfredCommand?.command?.cmd) {
-                    alfredCommand.command.cmd = alfredCommand.command.cmd.replace("{super}", parentCommand?.command?.cmd ?? "");
-                }
-                alfredCommand = merge({}, parentCommand, alfredCommand) as AlfredCommand;
-            }
-            const safeCommand = AlfredCommandSchema.parse(alfredCommand);
+    const exitCode = await runCommand(command, { values, args });
+    if (exitCode !== 0 && exitCode !== 130) {
+        console.error(pc.red(`✖ ${command.name} exited with code ${exitCode}`));
+    }
+    process.exitCode = exitCode;
+}
 
-            const command = program
-                .command(safeCommand.name)
-                .description(safeCommand.description)
-                .action(async (options: Record<string, string | number | boolean> | undefined, command) => {
-                    console.log(`🤖 Running command: ${safeCommand.name}`);
-                    if (safeCommand.config?.confirm) {
-                        const isConfirm = confirm(
-                            `Are you sure you want to run this command? ${safeCommand.name}`
-                        );
-                        if (!isConfirm) {
-                            console.log("Command canceled ❌");
-                            return;
-                        }
-                    }
-
-                    await execCommand(safeCommand.command, options);
-                    return;
-                });
-            safeCommand.options?.map((option) => buildOptions(command, option));
+function addUserCommand(program: Command, command: AlfredCommand): void {
+    const subcommand = program
+        .command(command.name)
+        .description(command.description)
+        // Extra arguments are available as "$@" in the command
+        .allowExcessArguments();
+    for (const option of command.options) {
+        subcommand.addOption(createOption(option));
+    }
+    const addYes =
+        command.config.confirm &&
+        !command.options.some(({ flags }) => {
+            const option = new Option(flags);
+            return option.long === "--yes" || option.short === "-y";
         });
-        buildCompletionOption(program, parsedAlfredCommands as AlfredCommand[]);
-        buildInitOption(program);
-        const isEmptyCommand = process.argv.length === 2;
-        if (isEmptyCommand) {
-            const command = await autocomplete({
-                message: "Select a command 🤖  ",
-                source: async (input) => {
-                    return parsedAlfredCommands
-                        .filter((alfredCommand) =>
-                            alfredCommand.name?.includes(input ?? "")
-                        )
-                        .map((alfredCommand) => {
-                            return {
-                                value: alfredCommand.name,
-                                name: `${chalk.bold(alfredCommand.name)} (${chalk.italic(
-                                    alfredCommand.description
-                                )})`,
-                            };
-                        });
-                },
-            });
-
-            await program.parseAsync([process.argv[0], process.argv[1], command ?? ""]);
-        } else {
-            await program.parseAsync(process.argv);
-        }
-    } catch (error) {
-        if (error instanceof ZodError) {
-            console.error(`There is a format error in the command configuration. Please correct it by referring to the manual.`);
-            const zodInfo = error.errors[0];
-            console.error(`Code: ${zodInfo.code}`);
-            console.error(`Message: ${zodInfo.message}`);
-            console.error(`Path: ${zodInfo.path.join(".")}`);
-            process.exit(22);
-        }
-        throw error;
+    if (addYes) {
+        subcommand.option("-y, --yes", "Run without asking for confirmation");
     }
-}
-
-main();
-function buildOptions(
-    command: Command,
-    option: AlfredCommand["options"][number]
-): Command {
-    if (!option) {
-        return command;
-    }
-    const {
-        flags,
-        description,
-        required,
-        defaultValue,
-        choices,
-        envVar,
-        type,
-    } = option;
-    const commandOptions = command.createOption(flags, description);
-
-    if (required) {
-        commandOptions.makeOptionMandatory(true);
-    }
-    if (defaultValue) {
-        commandOptions.default(defaultValue);
-        commandOptions.preset(defaultValue);
-    }
-    if (choices) {
-        commandOptions.choices(choices);
-    }
-    if (envVar) {
-        commandOptions.env(envVar);
-    }
-    if (type) {
-        switch (type) {
-            case "number":
-                commandOptions.argParser(Number);
-                break;
-            case "string":
-                commandOptions.argParser(String);
-                break;
-            case "boolean":
-                commandOptions.argParser((v) => v.toLowerCase() === "true");
-                break;
-            case "url":
-                commandOptions.argParser((value: string) => new URL(z.string().url().parse(value)));
-                break;
-            default:
-                throw new Error(`Type ${type} not supported`);
-        }
-    }
-
-    command.addOption(commandOptions);
-    return command;
-}
-function buildCompletionOption(program: Command, alfredCommands: AlfredCommand[]) {
-    const globalCommandOptions = [{
-        name: "--version",
-        description: "Show version number",
-    },
-    {
-        name: "--help",
-        description: "Show help",
-    }];
-    program
-        .command("completion")
-        .description("Generate completion script")
-        .action(() => {
-            const env = tabtabParseEnv(process.env);
-            
-            if (env.words === 1 && env.prev === "alfred") {
-                tabtabLog([...alfredCommands.map((command) => {
-                    return {
-                        name: command.name,
-                        description: command.description,
-                    }
-                }),
-            ...globalCommandOptions
-         ]);
-                return;
-            }
-            // 
-            // Complete the command
-            if (env.prev !== "alfred") {
-                const command = alfredCommands.find((command) => command.name === env.prev);
-                // log([JSON.stringify(command?.options, null, 2)]);
-                const descriptions = command?.options?.map((option) => {
-                    const extractFlagNameRegex = /(--\w+)/;
-                    const matches = extractFlagNameRegex.exec(option.flags);
-                    return {
-                        name: matches?.[1],
-                        description: `${option.flags} ${option.description}`,
-                    }
-                }).filter(({ name }) => name !== undefined);
-
-                tabtabLog([...descriptions ?? [], ...globalCommandOptions]);
-
-                return;
-            }
-            
-        });
-}
-
-function buildInitOption(program: Command) {
-    program
-        .command("init")
-        .description("Initialize auto-completion")
-        .action(async () => {
-            console.log("🤖 Initializing auto-completion");
-            await install({
-                name: "alfred",
-                completer: "alfred",
-            });
-            console.log("✅ Auto-completion initialized successfully!");
+    subcommand.action(async (values: Record<string, unknown>, self: Command) => {
+        const { yes, ...optionValues } = values;
+        await runAlfredCommand(command, addYes ? optionValues : values, self.args, Boolean(addYes && yes));
     });
 }
-async function execCommand(
-    command: AlfredCommand['command'],
-    options: Record<string, string | number | boolean> = {}
-) {
-    execRelativeCdCommand(command.dir);
-    let script = command.cmd;
-    // https://regex101.com/r/BKNCeu/1
-    const commandOptionsRegex = /(\$\{(\w+)\})/g;
-    const matches = [...script.matchAll(commandOptionsRegex)];
-    for (const match of matches) {
-        const [_, fullMatch, optionName] = match;
-        const optionValue = options[optionName];
-        if (optionValue === undefined || optionValue === null) {
-            script = script.replace(` ${fullMatch}`, "");
-        } else {
-            script = script.replace(fullMatch, optionValue.toString());
+
+async function main(argv: string[]): Promise<void> {
+    const builtinNames = [...BUILTINS.map(({ value }) => value), "help", "__complete"];
+    const isCompletion = argv[0] === "completion" || argv[0] === "__complete";
+
+    if (!isCompletion) {
+        const migrated = migrateLegacyCommandsFile();
+        if (migrated) {
+            console.error(`📦 Your commands moved to ${pc.bold(tildify(migrated.to))}`);
+            console.error(pc.dim(`   (a link was left at ${tildify(migrated.from)})`));
         }
     }
 
-    const { stderr, stdout, exitCode } = await $`bash -c ${script}`.nothrow();
-    if (exitCode === 0) {
-        console.log(stdout.toString());
-    } else {
-        console.error(stderr.toString());
-        console.log(`Exit code: ${exitCode}`);
+    let loaded: LoadedCommands | undefined;
+    let loadError: ConfigError | undefined;
+    try {
+        loaded = loadCommands();
+    } catch (error) {
+        if (!(error instanceof ConfigError)) {
+            throw error;
+        }
+        loadError = error;
     }
-}
-//#endregion
 
-function execRelativeCdCommand(dir: string | undefined | null): void {
-    if (!dir) {
-        return;
+    if (argv.length === 0) {
+        if (!isInteractive()) {
+            argv = ["--help"];
+        } else if (loadError?.reason === "not-found") {
+            const file = tildify(commandsFilePath());
+            if (!(await confirm({ message: `No commands yet. Create ${file} with a few examples?`, default: true }))) {
+                return;
+            }
+            createCommandsFile();
+            loaded = loadCommands();
+            loadError = undefined;
+            console.log(`${pc.green("✔")} Created ${file}, edit it with ${pc.bold("alfred edit")}`);
+        } else if (loadError) {
+            throw loadError;
+        }
+    } else if (loadError && !builtinNames.includes(argv[0]) && !argv[0].startsWith("-")) {
+        throw loadError;
     }
-    const useHomeDir = dir.startsWith("~");
-    if (useHomeDir) {
-        dir = dir.replace("~", os.homedir());
+
+    const program = new Command("alfred")
+        .description(description)
+        .version(version)
+        .showSuggestionAfterError()
+        .showHelpAfterError(pc.dim("(add --help for more information)"));
+    if (loadError) {
+        program.addHelpText("after", `\n${pc.yellow("⚠")} ${loadError.message}\n  ${pc.dim(loadError.hint ?? "")}`);
     }
-    cd(dir);
+
+    program.commandsGroup("Your commands:");
+    for (const command of loaded?.commands ?? []) {
+        addUserCommand(program, command);
+    }
+
+    program.commandsGroup("Alfred:");
+    program
+        .command("list")
+        .description("List your commands")
+        .option("--json", "Print the commands (with extends resolved) as JSON")
+        .action((options: { json?: boolean }) => {
+            if (!loaded) throw loadError;
+            listCommands(loaded, options);
+        });
+    program
+        .command("edit")
+        .description("Edit your commands file ($VISUAL or $EDITOR)")
+        .option("--path", "Only print the path of the commands file")
+        .action(editCommands);
+    program
+        .command("init")
+        .description("Create the commands file and enable shell completion")
+        .argument("[shell]", "zsh, bash or fish (default: your current shell)")
+        .option("-y, --yes", "Don't ask for confirmation")
+        .action((shell: string | undefined, options: { yes?: boolean }) => initAlfred({ shell, ...options }));
+    program
+        .command("doctor")
+        .description("Check your setup and your commands file")
+        .action(doctor);
+    program
+        .command("completion")
+        .description("Print the shell completion script")
+        .argument("[shell]", "zsh, bash or fish (default: your current shell)")
+        .addHelpText("after", '\nExample, in ~/.zshrc:\n  eval "$(alfred completion zsh)"')
+        .allowExcessArguments()
+        .action((shell: string | undefined) => {
+            // Completion installed by alfred <= 0.7 (tabtab): `alfred completion -- <words>`
+            if (process.env.COMP_LINE !== undefined && !isShell(shell)) {
+                const line = process.env.COMP_LINE.slice(0, Number(process.env.COMP_POINT ?? process.env.COMP_LINE.length));
+                const words = wordsFromLine(line);
+                console.log(formatCandidates("zsh", completionCandidates(words, loaded?.commands ?? [], BUILTINS), ""));
+                return;
+            }
+            const target = shell ?? detectShell();
+            if (!isShell(target)) {
+                throw new AlfredError(`Unsupported shell "${target ?? process.env.SHELL ?? ""}"`, {
+                    hint: "Supported shells: zsh, bash, fish.",
+                });
+            }
+            process.stdout.write(completionScript(target));
+        });
+    program.addHelpCommand(
+        new Command("help").argument("[command]").description("Show help for a command").helpGroup("Alfred:")
+    );
+    program
+        .command("__complete", { hidden: true })
+        .argument("<shell>")
+        .argument("[line]", "", "")
+        .action((shell: string, line: string) => {
+            if (!isShell(shell)) {
+                return;
+            }
+            const words = wordsFromLine(line);
+            const candidates = completionCandidates(words, loaded?.commands ?? [], BUILTINS);
+            console.log(formatCandidates(shell, candidates, words.at(-1) ?? ""));
+        });
+
+    if (argv.length === 0 && loaded) {
+        if (!loaded.commands.length) {
+            console.log(`No commands yet, add some with ${pc.bold("alfred edit")}.`);
+            return;
+        }
+        const picked = await pickCommand(loaded.commands);
+        argv = [picked.name, ...(await promptOptions(picked.options))];
+    }
+
+    await program.parseAsync(argv, { from: "user" });
 }
+
+main(process.argv.slice(2)).catch((error) => {
+    process.exitCode = printError(error);
+});

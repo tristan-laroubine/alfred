@@ -1,5 +1,19 @@
 [
     {
+        "name": "hello",
+        "description": "Say hello (try: alfred hello --name Bob)",
+        "command": {
+            "cmd": "echo \"Hello, ${name}!\""
+        },
+        "options": [
+            {
+                "flags": "-n, --name [name]",
+                "description": "Who to greet",
+                "defaultValue": "World"
+            }
+        ]
+    },
+    {
         "name": "git:empty-commit",
         "description": "Create an empty commit",
         "command": {
@@ -9,22 +23,22 @@
             {
                 "flags": "-m, --message [message]",
                 "description": "Commit message",
-                "type": "string",
                 "defaultValue": "Empty commit"
             }
         ]
     },
     {
         "name": "ls",
-        "description": "List files in home directory",
+        "description": "List files in your home directory",
         "command": {
-            "cmd": "ls",
-            "dir": "~/"
+            "dir": "~",
+            "cmd": "ls"
         }
     },
     {
         "name": "ls:hidden",
         "extends": "ls",
+        "description": "List all files in your home directory, hidden ones included",
         "command": {
             "cmd": "{super} -la"
         }
