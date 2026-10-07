@@ -165,4 +165,4 @@ bun run compile           # standalone binary in dist/alfred
 1. Bump `version` in `package.json` and commit.
 2. Push a matching tag: `git tag v0.8.0 && git push origin v0.8.0`.
 
-The [release workflow](.github/workflows/release.yml) then builds the binaries (macOS and Linux, arm64 and x64), creates the GitHub release, updates the Homebrew formula in [tristan-laroubine/homebrew-tap](https://github.com/tristan-laroubine/homebrew-tap) (needs the `HOMEBREW_TAP_TOKEN` secret) and publishes to npm (needs the `NPM_TOKEN` secret).
+The [release workflow](.github/workflows/release.yml) then builds the binaries (macOS and Linux, arm64 and x64), creates the GitHub release, updates the Homebrew formula in [tristan-laroubine/homebrew-tap](https://github.com/tristan-laroubine/homebrew-tap) (needs the `HOMEBREW_TAP_TOKEN` secret) and publishes to npm with [trusted publishing](https://docs.npmjs.com/trusted-publishers) (no token).

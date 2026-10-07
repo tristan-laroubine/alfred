@@ -84,11 +84,10 @@ jobs:
   npm:
     needs: binaries
     runs-on: ubuntu-latest
+    # Trusted publishing (OIDC): configured on npmjs.com, no token needed
     permissions:
       contents: read
       id-token: write
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -96,14 +95,8 @@ jobs:
           bun-version: 1.4.2
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: 24
+      - name: Use npm >= 11.5.1 (required by trusted publishing)
+        run: npm install -g npm@^11.5.1 && npm --version
       - run: bun install --frozen-lockfile
-      - name: Publish to npm
-        if: env.NPM_TOKEN != ''
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Explain how to enable npm publishing
-        if: env.NPM_TOKEN == ''
-        run: echo "::warning::NPM_TOKEN is not set, publish manually with 'npm publish'."
+      - run: npm publish --access public
